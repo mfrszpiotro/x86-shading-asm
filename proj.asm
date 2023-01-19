@@ -23,7 +23,7 @@ global shade
 %define		triangle_break	697
 %define		y1miny2			203
 %define		y1miny3			135
-%define 	triangle_end		231
+%define 	triangle_end	231
 
 shade:
 ;************************************************************************
