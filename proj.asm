@@ -112,7 +112,7 @@ break_rhs:
 	mov		bx, 0		;no phong part addition after breaking
 	ror		ebx, 16 	;rotate back to range+phong
 	mov		bx, ax
-	jmp		INPUT_COLOR
+	jmp		color_begin
 
 skip_rhs_chg:
 	;range for this scanline (Xb*3)
@@ -124,16 +124,27 @@ skip_rhs_chg:
 	add		bx, dx		;bx = new_range + phong
 
 ;*********************************************************************************************;
-INPUT_COLOR:
+color_begin:
 ;*********************************************************************************************;
 
-;blue
+
 	xor 	eax, eax
 	xor 	edx, edx
+	;mov		dx, 0		;free
+	ror		edx, 16 		;rotate to rgb counter
+	mov		dx, 1			;start counter from blue
+	;rol		edx, 16 	;rotate back to free
 
-calc_left_ba:
-	;I1 (b1)
-	mov		al, b1
+INPUT_COLOR:
+calc_left_Ia:
+	xor 	eax, eax
+	cmp		dx, 1
+	cmove	ax, b1
+	cmp		dx, 2
+	cmove	ax, g1
+	cmp		dx, 3
+	cmove	ax, r1
+	mov		ah, 0
 	push 	eax
 	fild	DWORD[esp]
 	pop		eax
@@ -146,7 +157,7 @@ calc_left_ba:
 	fild	DWORD[esp]
 	pop		eax
 	;Y1 - Y2
-	mov		al, y1miny2;
+	mov		al, y1miny2
 	push 	eax
 	fild	DWORD[esp]
 	pop		eax
@@ -157,21 +168,28 @@ calc_left_ba:
 	fstp	st0		 ;pop mid
 	;there is only res on the st0 and nothing else
 
-calc_right_ba:
-	;I2 (r2)
-	mov		al, b2
+calc_right_Ia:
+	cmp		dx, 1
+	cmove	ax, b2
+	cmp		dx, 2
+	cmove	ax, g2
+	cmp		dx, 3
+	cmove	ax, r2
+	mov		ah, 0
 	push 	eax
 	fild	DWORD[esp]
 	pop		eax
 	;Y1 - Ys
 	rol		ecx, 16		; Ys counter
-	mov		al, cl
+	rol		edx, 16		; rotate to free
+	mov		dx, cx		; dx is Ys
 	ror		ecx, 16		; lhsX start
-	mov		edx, triangle_end
-	sub		edx, eax
-	push 	edx
+	mov		ax, triangle_end	;ax is Y1
+	sub		ax, dx
+	ror		edx, 16		; rotate to counter	
+	push 	eax
 	fild	DWORD[esp]
-	pop		edx
+	pop		eax
 	;Y1 - Y2
 	mov		eax, y1miny2
 	push 	eax
@@ -183,25 +201,26 @@ calc_right_ba:
 	fmul	st1, st0 ;res = mid*r2
 	fstp	st0		 ;pop mid
 
-calc_ba:
+calc_Ia:
 	fadd	st1, st0 ;ba = left+right
 	fstp	st0		 ;pop right
 	;now at st0 is only ba
 
-calc_left_bp:
+calc_left_Ip:
 	;ba already in st0
 	;Xb - Xp
 	xor		eax, eax
-	mov		ax,	bx 	 ;x range
-	xor		edx, edx
-	mov		dx, cx	 ;Xa
-	add		ax, dx	 ;Xb = range + Xa
+	rol		edx, 16	 ;rotate to free
+	mov		dx,	bx 	 ;x range
+	add		dx, cx	 ;Xb = range + Xa
 
-	mov		edx, esi
-	sub		edx, edi ;distance till range
-	add		dx,	cx	 ;Xp = distance till range + Xa
+	mov		eax, esi
+	sub		eax, edi ;distance till range
+	add		ax,	cx	 ;Xp = distance till range + Xa
 
-	sub		eax, edx ;Xb-Xp
+	sub		dx, ax 	 ;Xb-Xp
+	mov		ax, dx 	 ;Xb-Xp still
+	ror		edx, 16	 ;rotate to counter
 	push 	eax
 	fild	DWORD[esp]
 	pop		eax
@@ -218,11 +237,15 @@ calc_left_bp:
 	;now at st0 is only left_rp
 
 	xor eax, eax
-	xor edx, edx
 
-calc_left_bb:
-	;I1 (b1)
-	mov		al, b1
+calc_left_Ib:
+	cmp		dx, 1
+	cmove	ax, b1
+	cmp		dx, 2
+	cmove	ax, g1
+	cmp		dx, 3
+	cmove	ax, r1
+	mov		ah, 0
 	push 	eax
 	fild	DWORD[esp]
 	pop		eax
@@ -246,21 +269,28 @@ calc_left_bb:
 	fmul	st1, st0 ;res = mid*b1
 	fstp	st0		 ;pop mid
 
-calc_right_bb:
-	;I3 (b3)
-	mov		al, b3
+calc_right_Ib:
+	cmp		dx, 1
+	cmove	ax, b3
+	cmp		dx, 2
+	cmove	ax, g3
+	cmp		dx, 3
+	cmove	ax, r3
+	mov		ah, 0
 	push 	eax
 	fild	DWORD[esp]
 	pop		eax
 	;Y1 - Ys
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
+	rol		ecx, 16		; Ys 
+	rol		edx, 16		; rotate to free
+	mov		dx, cx		; Ys
 	ror		ecx, 16		; lhsX start
-	mov		edx, triangle_end
-	sub		edx, eax
-	push 	edx
+	mov		ax, triangle_end	;Y1
+	sub		ax, dx
+	ror		edx, 16 	; rotate to counter
+	push 	eax
 	fild	DWORD[esp]
-	pop		edx
+	pop		eax
 	;Y1 - Y3
 	mov		eax, y1miny3
 	push 	eax
@@ -272,25 +302,24 @@ calc_right_bb:
 	fmul	st1, st0 ;res = mid*r3
 	fstp	st0		 ;pop mid
 
-calc_bb:
+calc_Ib:
 	fadd	st1, st0 ;ra = left-right
 	fstp	st0		 ;pop right
 
-calc_right_bp:
+calc_right_Ip:
 	;rb already in st0
 	;Xb - Xp
 	xor		eax, eax
-	xor		edx, edx
-	mov		ax, cx	 ;Xa
-
-	mov		edx, esi
-	sub		edx, edi ;distance till range
-	add		dx,	cx	 ;Xp = distance till range + Xa
-
-	sub		edx, eax ;Xp-Xa
-	push 	edx
+	rol		edx, 16		; rotate to free
+	mov		dx, cx	 	;Xa
+	mov		eax, esi	
+	sub		eax, edi 	;distance till range
+	add		ax,	cx	 	;Xp = distance till range + Xa
+	sub		ax, dx 		;Xp-Xa
+	ror		edx, 16 	;rotate to counter
+	push 	eax
 	fild	DWORD[esp]
-	pop		edx
+	pop		eax
 	
 	mov		ax, bx	 ;range = Xb-Xa
 	push 	eax
@@ -309,374 +338,12 @@ calc_right_bp:
 	fistp	DWORD[esp]
 	pop		eax
 	mov		[esi], eax
-	add		esi, 1
-blue_end:
 
-green_begin:
-	xor eax, eax
-	xor edx, edx
-
-calc_left_ga:
-	;I1 (g1)
-	mov		al, g1
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Ys - Y2
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	sub		al, triangle_start
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Y2
-	mov		al, y1miny2;
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;ys-y2 / y1-y2 = mid
-	fstp	st0		 ;pop y1-y2
-	fmul	st1, st0 ;res = mid*g1
-	fstp	st0		 ;pop mid
-	;there is only res on the st0 and nothing else
-
-calc_right_ga:
-	;I2 (g2)
-	mov		al, g2
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Ys
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	mov		edx, triangle_end
-	sub		edx, eax
-	push 	edx
-	fild	DWORD[esp]
-	pop		edx
-	;Y1 - Y2
-	mov		eax, y1miny2
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;y1-ys / y1-y2 = mid
-	fstp	st0		 ;pop y1-y2
-	fmul	st1, st0 ;res = mid*g2
-	fstp	st0		 ;pop mid
-
-calc_ga:
-	fadd	st1, st0 ;ra = left-right
-	fstp	st0		 ;pop right
-	;now at st0 is only ra
-
-calc_left_gp:
-	;ra already in st0
-	;Xb - Xp
-	xor		eax, eax
-	mov		ax,	bx 	 ;x range
-	xor		edx, edx
-	mov		dx, cx	 ;Xa
-	add		ax, dx	 ;Xb = range + Xa
-
-	mov		edx, esi
-	sub		edx, edi ;distance till range
-	add		dx,	cx	 ;Xp = distance till range + Xa
-
-	sub		eax, edx ;Xb-Xp
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	
-	mov		ax, bx	 ;range = Xb-Xa
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;Xb-Xp / Xb-Xa = mid
-	fstp	st0		 ;pop Xb-Xa
-	fmul	st1, st0 ;res = mid*ga
-	fstp	st0		 ;pop mid
-	;now at st0 is only left_gp
-
-	xor eax, eax
-	xor edx, edx
-
-calc_left_gb:
-	;I1 (g1)
-	mov		al, g1
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Ys - Y3
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	sub		eax, 96
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	xor		eax, eax
-	;Y1 - Y3
-	mov		al, y1miny3;
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;ys-y3 / y1-y3 = mid
-	fstp	st0		 ;pop y1-y3
-	fmul	st1, st0 ;res = mid*g1
-	fstp	st0		 ;pop mid
-
-calc_right_gb:
-	;I3 (g3)
-	mov		al, g3
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Ys
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	mov		edx, triangle_end
-	sub		edx, eax
-	push 	edx
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Y3
-	mov		eax, y1miny3
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;y1-ys / y1-y3 = mid
-	fstp	st0		 ;pop y1-y3
-	fmul	st1, st0 ;res = mid*g3
-	fstp	st0		 ;pop mid
-
-calc_gb:
-	fadd	st1, st0 ;ra = left-right
-	fstp	st0		 ;pop right
-
-calc_right_gp:
-	;rb already in st0
-	;Xb - Xp
-	xor		eax, eax
-	xor		edx, edx
-	mov		ax, cx	 ;Xa
-	mov		edx, esi
-	sub		edx, edi ;distance till range
-	add		dx,	cx	 ;Xp = distance till range + Xa
-	sub		edx, eax ;Xp-Xa
-	push 	edx
-	fild	DWORD[esp]
-	pop		edx
-	
-	mov		ax, bx	 ;range = Xb-Xa
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;Xp-Xa / Xb-Xa = mid
-	fstp	st0		 ;pop Xb-Xa
-	fmul	st1, st0 ;res = mid*gb
-	fstp	st0		 ;pop mid
-
-	xor 	eax, eax
-	push 	eax
-	fadd st1, st0
-	fstp 	st0
-	fistp	DWORD[esp]
-	pop		eax
-	mov		[esi], eax
-	add		esi, 1
-green_end:
-
-red_begin:
-	xor eax, eax
-	xor edx, edx
-
-calc_left_ra:
-	;I1 (r1)
-	mov		al, r1
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Ys - Y2
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	sub		al, triangle_start
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Y2
-	mov		al, y1miny2;
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;ys-y2 / y1-y2 = mid
-	fstp	st0		 ;pop y1-y2
-	fmul	st1, st0 ;res = mid*r1
-	fstp	st0		 ;pop mid
-	;there is only res on the st0 and nothing else
-
-calc_right_ra:
-	;I2 (r2)
-	mov		al, r2
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Ys
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	mov		edx, triangle_end
-	sub		edx, eax
-	push 	edx
-	fild	DWORD[esp]
-	pop		edx
-	;Y1 - Y2
-	mov		eax, y1miny2
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;y1-ys / y1-y2 = mid
-	fstp	st0		 ;pop y1-y2
-	fmul	st1, st0 ;res = mid*r2
-	fstp	st0		 ;pop mid
-
-calc_ra:
-	fadd	st1, st0 ;ra = left-right
-	fstp	st0		 ;pop right
-	;now at st0 is only ra
-
-calc_left_rp:
-	;ra already in st0
-	;Xb - Xp
-	xor		eax, eax
-	mov		ax,	bx 	 ;x range
-	xor		edx, edx
-	mov		dx, cx	 ;Xa
-	add		ax, dx	 ;Xb = range + Xa
-
-	mov		edx, esi
-	sub		edx, edi ;distance till range
-	add		dx,	cx	 ;Xp = distance till range + Xa
-
-	sub		eax, edx ;Xb-Xp
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	
-	mov		ax, bx	 ;range = Xb-Xa
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;Xb-Xp / Xb-Xa = mid
-	fstp	st0		 ;pop Xb-Xa
-	fmul	st1, st0 ;res = mid*ra
-	fstp	st0		 ;pop mid
-	;now at st0 is only left_rp
-
-	xor eax, eax
-	xor edx, edx
-
-calc_left_rb:
-	;I1 (r1)
-	mov		al, r1
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Ys - Y3
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	sub		eax, 96
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	xor		eax, eax
-	;Y1 - Y3
-	mov		al, y1miny3;
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;ys-y3 / y1-y3 = mid
-	fstp	st0		 ;pop y1-y3
-	fmul	st1, st0 ;res = mid*r1
-	fstp	st0		 ;pop mid
-
-calc_right_rb:
-	;I3 (r3)
-	mov		al, r3
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-	;Y1 - Ys
-	rol		ecx, 16		; Ys counter
-	mov		al, cl
-	ror		ecx, 16		; lhsX start
-	mov		edx, triangle_end
-	sub		edx, eax
-	push 	edx
-	fild	DWORD[esp]
-	pop		edx
-	;Y1 - Y3
-	mov		eax, y1miny3
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;y1-ys / y1-y3 = mid
-	fstp	st0		 ;pop y1-y3
-	fmul	st1, st0 ;res = mid*r3
-	fstp	st0		 ;pop mid
-
-calc_rb:
-	fadd	st1, st0 ;ra = left-right
-	fstp	st0		 ;pop right
-
-calc_right_rp:
-	;rb already in st0
-	;Xb - Xp
-	xor		eax, eax
-	xor		edx, edx
-	mov		ax, cx	 ;Xa
-	mov		edx, esi
-	sub		edx, edi ;distance till range
-	add		dx,	cx	 ;Xp = distance till range + Xa
-	sub		edx, eax ;Xp-Xa
-	push 	edx
-	fild	DWORD[esp]
-	pop		edx
-	
-	mov		ax, bx	 ;range = Xb-Xa
-	push 	eax
-	fild	DWORD[esp]
-	pop		eax
-
-	fdiv	st1, st0 ;Xp-Xa / Xb-Xa = mid
-	fstp	st0		 ;pop Xb-Xa
-	fmul	st1, st0 ;res = mid*rb
-	fstp	st0		 ;pop mid
-
-	xor 	eax, eax
-	push 	eax
-	fadd st1, st0
-	fstp 	st0
-	fistp	DWORD[esp]
-	pop		eax
-	mov		[esi], eax
-	add		esi, 1
-red_end:
+color_end:
+	add		esi, 1	 ;increase buffer pointer
+	add		dx, 1	 ;increase counter
+	cmp		dx, 3	 ;if above 3 then end adding rgb colors
+	jle		INPUT_COLOR
 
 end_small_lop:
 	;check if esi distance from edi exceeded the scanline triangle range
